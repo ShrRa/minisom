@@ -2,7 +2,8 @@ from math import sqrt
 
 from numpy import (array, unravel_index, nditer, linalg, random, subtract,
                    power, exp, pi, zeros, arange, outer, meshgrid, dot,
-                   logical_and, mean, std, cov, argsort, linspace, transpose)
+                   logical_and, mean, std, cov, argsort, linspace, transpose,
+                   delete, concatenate,divide,nan_to_num, zeros_like)
 from collections import defaultdict, Counter
 from warnings import warn
 from sys import stdout
@@ -207,9 +208,12 @@ class MiniSom(object):
         if num_iteration < 1:
             raise ValueError('num_iteration must be > 1')
 
-    def _check_input_len(self, data):
+    def _check_input_len(self, data, colsToDrop=None):
         """Checks that the data in input is of the correct shape."""
-        data_len = len(data[0])
+        if colsToDrop!=None:
+            data_len = len(delete(data[0],colsToDrop))
+        else:
+            data_len = len(data[0])
         if self._input_len != data_len:
             msg = 'Received %d features, expected %d.' % (data_len,
                                                           self._input_len)
@@ -294,6 +298,14 @@ class MiniSom(object):
         for i, c1 in enumerate(linspace(-1, 1, len(self._neigx))):
             for j, c2 in enumerate(linspace(-1, 1, len(self._neigy))):
                 self._weights[i, j] = c1*pc[pc_order[0]] + c2*pc[pc_order[1]]
+
+    def set_weights(self, weights):
+        """Sets the weights of the neural network from numpy array"""
+        if weights.shape!=self._weights.shape:
+            msg='The shape of passed weights array does not equal the shape of SOM: '+str(weights.shape)+'!='+str(self._weights.shape)
+            print(self._weights.shape)
+            raise ValueError(msg)
+        self._weights=weights
 
     def train_random(self, data, num_iteration, verbose=False):
         """Trains the SOM picking samples at random from data"""
@@ -388,6 +400,59 @@ class MiniSom(object):
             winmap[position] = Counter(winmap[position])
         return winmap
 
+    def cells_map(self, data, colsToDrop=None):
+        """Returns a list with position of winning cell i,j added to the end 
+        of corresponding pattern"""
+        self._check_input_len(data,colsToDrop)
+        data_cell=[]
+        for x in data:
+            if colsToDrop==None:
+                data_cell.append(concatenate((x,self.winner(x))))
+            else:
+                data_cell.append(concatenate((x,self.winner(delete(x,colsToDrop)))))
+        return data_cell
+    
+    def quantization_data(self, data, colsToDrop=None):
+        """Returns the quantization error for each sample in data."""
+        self._check_input_len(data,colsToDrop)
+        quantization_errors=[]
+        for x in data:
+            if colsToDrop!=None:
+                x_cut=delete(x,colsToDrop)
+                diff=fast_norm(x_cut-self._weights[self.winner(x_cut)])
+                quantization_errors.append(concatenate((x,[diff])))
+            else:
+                diff=fast_norm(x-self._weights[self.winner(x)])
+                quantization_errors.append(concatenate((x,[diff])))
+        return quantization_errors
+    
+    def quantization_map(self, data,colsToDrop=None):
+        """Returns the quantization map computed as the average of quantization errors for each cell."""
+        self._check_input_len(data,colsToDrop)
+        errors = zeros_like(self._weights)
+        cellWinNums=zeros_like(self._weights)
+        for x in data:
+            if colsToDrop!=None:
+                win=self.winner(delete(x,colsToDrop))
+                errors[win] += fast_norm(delete(x,colsToDrop)-self._weights[win])
+                cellWinNums[win]+=1
+            else:
+                win=self.winner(x)
+                errors[win] += fast_norm(x-self._weights[win])
+                cellWinNums[win]+=1
+        errors2=divide(errors,cellWinNums, out=zeros_like(errors), where=cellWinNums!=0)
+        return errors2
+    
+    def ID_map(self, data, mapCols, colsToDrop=None):
+        """Returns a dictionary wm where wm[(i,j)] is a list
+        with all the IDs that have been mapped in the position i,j."""
+        IDMap = defaultdict(list)
+        for x in data:
+            if colsToDrop!=None:
+                IDMap[self.winner(delete(x,colsToDrop))].append(list(x[i] for i in array(mapCols)))
+            else:
+                IDMap[self.winner(x)].append(list(x[i] for i in array(mapCols)))
+        return IDMap
 
 class TestMinisom(unittest.TestCase):
     def setUp(self):
@@ -418,6 +483,8 @@ class TestMinisom(unittest.TestCase):
 
         self.som._check_input_len(array([[1]]))
         self.som._check_input_len([[1]])
+        self.som._check_input_len([[1,9,4,5]],(1,2,3))
+        self.som._check_input_len([[1]],None)
 
     def test_unavailable_neigh_function(self):
         with self.assertRaises(ValueError):
@@ -506,6 +573,12 @@ class TestMinisom(unittest.TestCase):
         q1 = som.quantization_error(data)
         som.train_random(data, 10, verbose=True)
         assert q1 > som.quantization_error(data)
+        
+    def test_set_weights(self):
+        som = MiniSom(2, 2, 2)
+        som.set_weights(array([[[0,3],[2,4]],[[5,6],[7,8]]]))
+        weights=som.get_weights()
+        assert_array_equal(weights[0], array([[0,3],[2,4]]))
 
     def test_random_weights_init(self):
         som = MiniSom(2, 2, 2, random_seed=1)
@@ -524,3 +597,40 @@ class TestMinisom(unittest.TestCase):
         som = MiniSom(2, 2, 2, random_seed=1)
         som._weights = array([[[1.,  0.], [0., 1.]], [[1., 0.], [0., 1.]]])
         assert_array_equal(som.distance_map(), array([[1., 1.], [1., 1.]]))
+     
+    def test_cell_map(self):
+        som = MiniSom(2, 2, 2, random_seed=1)
+        som.set_weights(array([[[0,3],[2,4]],[[5,6],[7,8]]]))
+        assert_array_equal(som.cells_map([[2,4]]), array([[2,4,0,1]]))
+        assert_array_equal(som.cells_map([[5,6,8]],2), array([[5,6,8,1,0]]))
+        
+    def test_quantization_data(self):
+        assert_array_equal(self.som.quantization_data([[6]]),array([[6,1]]))
+        
+    def test_quantization_map(self):
+        quantizMap=zeros((5,5))
+        quantizMap[2,3]=1
+        assert_array_equal(self.som.quantization_map([[6],[4]]),quantizMap)
+        assert_array_equal(self.som.quantization_map([[6,5],[4,6]],1),quantizMap)
+        
+    def test_ID_map(self):
+        print(self.som.ID_map([[5.3,1,5],[4.9,2,5],[2.1,3,5],[0,4,5],[0.1,5,5]],1,(1,2)))
+        self.assertEqual(self.som.ID_map([[5.3],[4],[2.1],[0.3],[0]],0),
+                         {(2,3):[[5.3],[4]],
+                          (1,1):[[2.1]],
+                          (0,0):[[0.3],[0]]})
+        self.assertEqual(self.som.ID_map([[5.3,1],[4.9,2],[2.1,3],[0,4],[0.1,5]],1,1),
+                         {(2,3):[[1],[2]],
+                          (1,1):[[3]],
+                          (0,0):[[4],[5]]})
+        #self.assertEqual(self.som.ID_map([[5.3,1,5],[4.9,2,5],[2.1,3,5],[0,4,5],[0.1,5,5]],1,(1,2)),
+         #                {(2,3):[[[5],[1]],[[5],[2]]],
+          #                (1,1):[[[2],[3]]],
+           #               (0,0):[[[5],[4]],[[5],[5]]]})
+           
+        self.assertEqual(self.som.ID_map([[5.1,1,5],[4.2,2,5],[2,3,5],[0,4,5],[0,5,5]],[0,1],(1,2)),
+                         {(2,3):[[[5.1],[1]],[[4,2],[2]]],
+                          (1,1):[[[2],[3]]],
+                          (0,0):[[[0],[4]],[[0],[5]]]})
+
+unittest.main()
