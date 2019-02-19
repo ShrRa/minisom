@@ -446,12 +446,14 @@ class MiniSom(object):
     def ID_map(self, data, mapCols, colsToDrop=None):
         """Returns a dictionary wm where wm[(i,j)] is a list
         with all the IDs that have been mapped in the position i,j."""
+        if type(mapCols)==int:
+            mapCols=(mapCols,)
         IDMap = defaultdict(list)
         for x in data:
             if colsToDrop!=None:
-                IDMap[self.winner(delete(x,colsToDrop))].append(list(x[i] for i in array(mapCols)))
+                IDMap[self.winner(delete(x,colsToDrop))].append(list(x[i] for i in mapCols))
             else:
-                IDMap[self.winner(x)].append(list(x[i] for i in array(mapCols)))
+                IDMap[self.winner(x)].append(list(x[i] for i in mapCols))
         return IDMap
 
 class TestMinisom(unittest.TestCase):
@@ -614,7 +616,6 @@ class TestMinisom(unittest.TestCase):
         assert_array_equal(self.som.quantization_map([[6,5],[4,6]],1),quantizMap)
         
     def test_ID_map(self):
-        print(self.som.ID_map([[5.3,1,5],[4.9,2,5],[2.1,3,5],[0,4,5],[0.1,5,5]],1,(1,2)))
         self.assertEqual(self.som.ID_map([[5.3],[4],[2.1],[0.3],[0]],0),
                          {(2,3):[[5.3],[4]],
                           (1,1):[[2.1]],
@@ -623,14 +624,9 @@ class TestMinisom(unittest.TestCase):
                          {(2,3):[[1],[2]],
                           (1,1):[[3]],
                           (0,0):[[4],[5]]})
-        #self.assertEqual(self.som.ID_map([[5.3,1,5],[4.9,2,5],[2.1,3,5],[0,4,5],[0.1,5,5]],1,(1,2)),
-         #                {(2,3):[[[5],[1]],[[5],[2]]],
-          #                (1,1):[[[2],[3]]],
-           #               (0,0):[[[5],[4]],[[5],[5]]]})
-           
-        self.assertEqual(self.som.ID_map([[5.1,1,5],[4.2,2,5],[2,3,5],[0,4,5],[0,5,5]],[0,1],(1,2)),
-                         {(2,3):[[[5.1],[1]],[[4,2],[2]]],
-                          (1,1):[[[2],[3]]],
-                          (0,0):[[[0],[4]],[[0],[5]]]})
+        self.assertEqual(self.som.ID_map([[5.1,1,5],[4,2,5],[2,3,5],[0,4.2,5],[0,5,5]],(0,1),(1,2)),
+                         {(2,3):[[5.1,1],[4,2]],
+                          (1,1):[[2,3]],
+                          (0,0):[[0,4.2],[0,5]]})
 
 unittest.main()
