@@ -307,10 +307,11 @@ class MiniSom(object):
             raise ValueError(msg)
         self._weights=weights
 
-    def train_random(self, data, num_iteration, verbose=False):
+    def train_random(self, data, num_iteration, verbose=False, learn_curve=True):
         """Trains the SOM picking samples at random from data"""
         self._check_iteration_number(num_iteration)
         self._check_input_len(data)
+        quantization_error=[]
         iterations = range(num_iteration)
         if verbose:
             iterations = _incremental_index_verbose(num_iteration)
@@ -320,11 +321,15 @@ class MiniSom(object):
             rand_i = self._random_generator.randint(len(data))
             self.update(data[rand_i], self.winner(data[rand_i]),
                         iteration, num_iteration)
+            if learn_curve==True and iteration%(int(num_iteration/10))==0:
+                quantization_error.append(self.quantization_error(data))
+        return quantization_error
 
-    def train_batch(self, data, num_iteration, verbose=False):
+    def train_batch(self, data, num_iteration, verbose=False, learn_curve=True):
         """Trains using all the vectors in data sequentially"""
         self._check_iteration_number(num_iteration)
         self._check_input_len(data)
+        quantization_error=[]
         iterations = range(num_iteration)
         if verbose:
             iterations = _incremental_index_verbose(num_iteration)
@@ -333,6 +338,9 @@ class MiniSom(object):
             idx = iteration % (len(data)-1)
             self.update(data[idx], self.winner(data[idx]),
                         iteration, num_iteration)
+            if learn_curve==True and iteration%(int(num_iteration/10))==0:
+                quantization_error.append(self.quantization_error(data))
+        return quantization_error
 
     def distance_map(self):
         """Returns the distance map of the weights.
