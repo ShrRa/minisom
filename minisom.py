@@ -463,6 +463,20 @@ class MiniSom(object):
             else:
                 IDMap[self.winner(x)].append(list(x[i] for i in mapCols))
         return IDMap
+    
+    def quantiz_data_map(self, data, IDCol, colsToDrop=None):
+        """Returns a dictionary wm where wm[(i,j)] is a list
+        with all the quantization errors for instances that have been mapped in the position i,j."""
+        quantizErrorMap = defaultdict(list)
+        for x in data:
+            if colsToDrop!=None:
+                x_cut=delete(x,colsToDrop)
+                diff=fast_norm(x_cut-self._weights[self.winner(x_cut)])
+                quantizErrorMap[self.winner(x_cut)].append(list(x[IDCol],diff))
+            else:
+                diff=fast_norm(x-self._weights[self.winner(x)])
+                quantizErrorMap[self.winner(x)].append(list(x[IDCol],diff))
+        return quantizErrorMap
 
 class TestMinisom(unittest.TestCase):
     def setUp(self):
