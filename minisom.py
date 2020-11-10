@@ -433,12 +433,28 @@ class MiniSom(object):
                 diff=fast_norm(x-self._weights[self.winner(x)])
                 quantization_errors.append(concatenate((x,[diff])))
         return quantization_errors
+        
+    def quantization_data_full(self, data, colsToDrop=None):
+        """Returns the quantization error for each sample in data."""
+        self._check_input_len(data,colsToDrop)
+        quantization_errors=[]
+        x_cut=[]
+        for x in data:
+            if colsToDrop!=None:
+                x_cut=delete(x,colsToDrop)
+            else:
+                x_cut=x
+            diff=fast_norm(x_cut-self._weights[self.winner(x_cut)])
+            quant_err_vector=array(x_cut-self._weights[self.winner(x_cut)])
+            quant_err_vector=concatenate((quant_err_vector,[diff]))
+            quantization_errors.append(concatenate((x,quant_err_vector)))
+        return quantization_errors
     
     def quantization_map(self, data,colsToDrop=None):
         """Returns the quantization map computed as the average of quantization errors for each cell."""
         self._check_input_len(data,colsToDrop)
-        errors = zeros_like(self._weights)
-        cellWinNums=zeros_like(self._weights)
+        errors = zeros_like(self._activation_map)
+        cellWinNums=zeros_like(self._activation_map)
         for x in data:
             if colsToDrop!=None:
                 win=self.winner(delete(x,colsToDrop))
@@ -472,11 +488,12 @@ class MiniSom(object):
             if colsToDrop!=None:
                 x_cut=delete(x,colsToDrop)
                 diff=fast_norm(x_cut-self._weights[self.winner(x_cut)])
-                quantizErrorMap[self.winner(x_cut)].append(list(x[IDCol],diff))
+                quantizErrorMap[self.winner(x_cut)].append(list([x[IDCol],diff]))
             else:
                 diff=fast_norm(x-self._weights[self.winner(x)])
-                quantizErrorMap[self.winner(x)].append(list(x[IDCol],diff))
+                quantizErrorMap[self.winner(x)].append(list([x[IDCol],diff]))
         return quantizErrorMap
+
 
 class TestMinisom(unittest.TestCase):
     def setUp(self):
@@ -651,4 +668,4 @@ class TestMinisom(unittest.TestCase):
                           (1,1):[[2,3]],
                           (0,0):[[0,4.2],[0,5]]})
 
-unittest.main()
+#unittest.main()
